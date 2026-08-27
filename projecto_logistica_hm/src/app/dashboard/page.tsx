@@ -232,22 +232,35 @@ export default async function DashboardPage() {
             </div>
 
             {/* Traceability & History */}
-            <div className="bg-white border border-neutral-200 rounded-2xl p-6 flex flex-col justify-between opacity-85">
-              <div className="space-y-3">
-                <div className="w-12 h-12 rounded-xl bg-neutral-100 border border-neutral-200 flex items-center justify-center text-neutral-400">
-                  <History className="w-6 h-6" />
+            {isAdmin && (
+              <Link
+                href="/admin/historial"
+                className="group bg-white border border-neutral-200 hover:border-neutral-900 rounded-2xl p-6 transition-all duration-200 hover:shadow-xl flex flex-col justify-between"
+              >
+                <div className="space-y-3">
+                  <div className="w-12 h-12 rounded-xl bg-neutral-900 border border-neutral-900 flex items-center justify-center text-white group-hover:scale-105 transition-transform">
+                    <History className="w-6 h-6" />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <h3 className="font-bold text-neutral-900 group-hover:text-neutral-600 transition-colors">
+                        Historial y Trazabilidad
+                      </h3>
+                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-neutral-900 text-white border border-neutral-900">
+                        Admin
+                      </span>
+                    </div>
+                    <p className="text-xs text-neutral-500 mt-1">
+                      Registro inmutable de acciones, responsables y fechas para auditoría operativa continua.
+                    </p>
+                  </div>
                 </div>
-                <div>
-                  <h3 className="font-bold text-neutral-900">Historial y Trazabilidad</h3>
-                  <p className="text-xs text-neutral-500 mt-1">
-                    Registro inmutable de acciones, responsables y fechas para auditoría operativa continua.
-                  </p>
+                <div className="mt-6 flex items-center gap-1 text-xs font-semibold text-neutral-900 group-hover:text-neutral-600">
+                  <span>Ver historial completo</span>
+                  <ArrowRight className="w-3.5 h-3.5 group-hover:translate-x-1 transition-transform" />
                 </div>
-              </div>
-              <div className="mt-6 flex items-center gap-1.5 text-xs text-neutral-400 font-medium">
-                <span>Próximo módulo operativo</span>
-              </div>
-            </div>
+              </Link>
+            )}
           </div>
         </div>
       </main>
