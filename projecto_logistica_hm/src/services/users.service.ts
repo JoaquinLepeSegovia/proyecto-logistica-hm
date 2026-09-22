@@ -1,6 +1,7 @@
 import { createAdminClient } from '@/lib/supabase/admin';
 import { CreateUserInput, UpdateUserInput, UserProfile, UsuarioDetalle } from '@/types/auth.types';
 import { EmailService } from '@/services/email.service';
+import type { SupabaseClient } from '@supabase/supabase-js';
 
 export class UsersService {
   /**
@@ -16,22 +17,57 @@ export class UsersService {
   }
 
   /**
-   * Obtiene la lista completa de usuarios
+   * Obtiene la lista completa de usuarios (incluye sucursales N:M y zonas asignadas)
    */
   static async getUsers(): Promise<UserProfile[]> {
     try {
       const admin = createAdminClient();
-      const { data, error } = await admin
-        .from('usuario')
-        .select('*')
-        .order('created_at', { ascending: false });
+      const [usuariosRes, sucursalesRes, zonasRes] = await Promise.all([
+        admin.from('usuario').select('*').order('created_at', { ascending: false }),
+        admin
+          .from('usuario_sucursal')
+          .select('usuario_id, sucursal_id, sucursal:sucursal_id(id, nombre)'),
+        admin
+          .from('usuario_zona')
+          .select('usuario_id, zona_id, zona:zona_id(id, nombre)'),
+      ]);
 
-      if (error) {
-        console.error('Error al listar usuarios:', error);
+      if (usuariosRes.error) {
+        console.error('Error al listar usuarios:', usuariosRes.error);
         return [];
       }
 
-      return (data || []) as UserProfile[];
+      const sucursalesPorUsuario = new Map<string, Array<{ id: number; nombre: string | null }>>();
+      (sucursalesRes.data || []).forEach((row: {
+        usuario_id: string;
+        sucursal_id: number;
+        sucursal: Array<{ id: number; nombre: string | null }> | { id: number; nombre: string | null } | null;
+      }) => {
+        if (!row.sucursal_id) return;
+        const s = Array.isArray(row.sucursal) ? row.sucursal[0] : row.sucursal;
+        const lista = sucursalesPorUsuario.get(row.usuario_id) || [];
+        lista.push({ id: row.sucursal_id, nombre: s?.nombre ?? null });
+        sucursalesPorUsuario.set(row.usuario_id, lista);
+      });
+
+      const zonasPorUsuario = new Map<string, Array<{ id: number; nombre: string }>>();
+      (zonasRes.data || []).forEach((row: {
+        usuario_id: string;
+        zona_id: number;
+        zona: Array<{ id: number; nombre: string }> | { id: number; nombre: string } | null;
+      }) => {
+        if (!row.zona_id) return;
+        const z = Array.isArray(row.zona) ? row.zona[0] : row.zona;
+        const lista = zonasPorUsuario.get(row.usuario_id) || [];
+        lista.push({ id: row.zona_id, nombre: z?.nombre ?? '' });
+        zonasPorUsuario.set(row.usuario_id, lista);
+      });
+
+      return (usuariosRes.data || []).map((u: UserProfile) => ({
+        ...u,
+        sucursales: sucursalesPorUsuario.get(u.id) || [],
+        zonas: zonasPorUsuario.get(u.id) || [],
+      }));
     } catch (err) {
       console.error('Error en getUsers:', err);
       return [];
@@ -120,7 +156,14 @@ export class UsersService {
         };
       }
 
-      // 4. Si es jefe_local con sucursal asignada, vincularlo como encargado de la sucursal
+      // 4. Asignacion de sucursales y zonas (multisede / logistica por zonas)
+      await this.setSucursalesAsignadas(admin, authUserId, {
+        principal: input.sucursal_id || null,
+        multiplas: input.sucursales_ids || [],
+      });
+      await this.setZonasAsignadas(admin, authUserId, input.zonas_ids || []);
+
+      // 4.1 Si es jefe_local con sucursal principal, vincularlo como encargado de esa sucursal
       if (input.rol === 'jefe_local' && input.sucursal_id) {
         await admin
           .from('sucursal')
@@ -302,6 +345,19 @@ export class UsersService {
         },
       });
 
+      // Asignaciones N:M (sucursales multiplas y zonas de logistica)
+      if (input.sucursales_ids !== undefined || input.sucursal_id !== undefined) {
+        const principal =
+          input.sucursal_id !== undefined ? input.sucursal_id : (data as UserProfile).sucursal_id ?? null;
+        await this.setSucursalesAsignadas(admin, userId, {
+          principal,
+          multiplas: input.sucursales_ids || [],
+        });
+      }
+      if (input.zonas_ids !== undefined) {
+        await this.setZonasAsignadas(admin, userId, input.zonas_ids);
+      }
+
       return { success: true, user: data as UserProfile };
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Error al actualizar usuario';
@@ -357,6 +413,52 @@ export class UsersService {
     } catch (err) {
       console.error('Error en getUsuarioDetalleById:', err);
       return null;
+    }
+  }
+
+  /**
+   * Reemplaza el conjunto de sucursales asignadas (N:M) de un usuario.
+   * La sucursal principal (usuario.sucursal_id) siempre queda incluida.
+   */
+  private static async setSucursalesAsignadas(
+    admin: SupabaseClient,
+    userId: string,
+    opts: { principal: number | null; multiplas: number[] }
+  ): Promise<void> {
+    try {
+      const ids = new Set<number>();
+      if (opts.principal) ids.add(opts.principal);
+      (opts.multiplas || []).forEach((id) => {
+        if (id) ids.add(id);
+      });
+
+      await admin.from('usuario_sucursal').delete().eq('usuario_id', userId);
+
+      if (ids.size > 0) {
+        const filas = Array.from(ids).map((sucursal_id) => ({ usuario_id: userId, sucursal_id }));
+        await admin.from('usuario_sucursal').insert(filas);
+      }
+    } catch (err) {
+      console.error('Error en setSucursalesAsignadas:', err);
+    }
+  }
+
+  /** Reemplaza las zonas asignadas (N:M) de un usuario (logistica por zonas). */
+  private static async setZonasAsignadas(
+    admin: SupabaseClient,
+    userId: string,
+    zonas_ids: number[]
+  ): Promise<void> {
+    try {
+      await admin.from('usuario_zona').delete().eq('usuario_id', userId);
+
+      const ids = (zonas_ids || []).filter(Boolean);
+      if (ids.length > 0) {
+        const filas = ids.map((zona_id) => ({ usuario_id: userId, zona_id }));
+        await admin.from('usuario_zona').insert(filas);
+      }
+    } catch (err) {
+      console.error('Error en setZonasAsignadas:', err);
     }
   }
 }

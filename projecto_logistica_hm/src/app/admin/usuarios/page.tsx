@@ -1,6 +1,7 @@
 import { AuthService } from '@/services/auth.service';
 import { UsersService } from '@/services/users.service';
 import { SucursalesService } from '@/services/sucursales.service';
+import { OrganizacionService } from '@/services/organizacion.service';
 import { redirect } from 'next/navigation';
 import UsersTableClient from './UsersTableClient';
 import TopNavbar from '@/components/TopNavbar';
@@ -18,8 +19,11 @@ export default async function AdminUsuariosPage() {
     redirect('/dashboard?error=unauthorized');
   }
 
-  const users = await UsersService.getUsers();
-  const sucursales = await SucursalesService.getSucursales();
+  const [users, sucursales, zonas] = await Promise.all([
+    UsersService.getUsers(),
+    SucursalesService.getSucursales(),
+    OrganizacionService.getZonas(),
+  ]);
 
   return (
     <div className="min-h-screen bg-neutral-100 text-neutral-900 flex flex-col">
@@ -37,7 +41,7 @@ export default async function AdminUsuariosPage() {
         <UsersTableClient
           users={users}
           sucursales={sucursales}
-          currentAdminEmail={profile.email}
+          zonas={zonas}
           currentAdminId={profile.id}
         />
       </main>

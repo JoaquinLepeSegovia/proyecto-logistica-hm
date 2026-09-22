@@ -10,7 +10,7 @@ async function verifyVehiculoPermission() {
   if (!profile || !profile.activo) {
     throw new Error('Acceso no autorizado. Se requiere una cuenta activa.');
   }
-  const allowedRoles = ['administrador', 'jefe_local', 'logistica'];
+  const allowedRoles = ['administrador', 'jefe_local', 'logistica', 'operaciones'];
   if (!allowedRoles.includes(profile.rol)) {
     throw new Error('No tienes permisos para gestionar vehículos.');
   }
@@ -21,10 +21,15 @@ export async function createVehiculoAction(data: CreateVehiculoInput) {
   try {
     await verifyVehiculoPermission();
 
-    if (!data.chasis?.trim() || !data.patente?.trim() || !data.marca?.trim() || !data.modelo?.trim() || !data.anio) {
+    if (
+      !data.chasis?.trim() ||
+      !data.marca?.trim() ||
+      !data.modelo?.trim() ||
+      !data.anio
+    ) {
       return {
         success: false,
-        error: 'Todos los campos marcados son obligatorios.',
+        error: 'Todos los campos marcados son obligatorios (la patente es opcional).',
       };
     }
 
@@ -89,6 +94,43 @@ export async function deleteVehiculoAction(id: string) {
     return {
       success: true,
       message: 'Vehículo eliminado exitosamente.',
+    };
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : 'Error inesperado';
+    return { success: false, error: msg };
+  }
+}
+
+export interface ImportVehiculosData {
+  csv: string;
+  anioPorDefecto?: number;
+}
+
+export async function importVehiculosAction(data: ImportVehiculosData) {
+  try {
+    await verifyVehiculoPermission();
+
+    if (!data.csv?.trim()) {
+      return { success: false, error: 'Debes pegar o subir el contenido CSV del stock.' };
+    }
+
+    const result = await VehiculoService.importVehiculosCSV(data.csv, {
+      anioPorDefecto: data.anioPorDefecto,
+    });
+
+    if (!result.success && !result.importados) {
+      return { success: false, error: result.error || result.mensaje || 'Error al importar.' };
+    }
+
+    revalidatePath('/admin/vehiculos');
+    return {
+      success: true,
+      mensaje: result.mensaje,
+      total: result.total,
+      importados: result.importados,
+      duplicados: result.duplicados,
+      errores: result.errores,
+      marcasProcesadas: result.marcasProcesadas,
     };
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : 'Error inesperado';

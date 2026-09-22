@@ -2,7 +2,12 @@
 
 import { useState, useEffect, useTransition } from 'react';
 import { VehiculoConDisponibilidad } from '@/types/vehiculo.types';
-import { createVehiculoAction, updateVehiculoAction, deleteVehiculoAction } from '@/app/actions/vehiculo.actions';
+import {
+  createVehiculoAction,
+  updateVehiculoAction,
+  deleteVehiculoAction,
+  importVehiculosAction,
+} from '@/app/actions/vehiculo.actions';
 import {
   Car,
   Plus,
@@ -15,6 +20,7 @@ import {
   Lock,
   Unlock,
   Truck,
+  Upload,
 } from 'lucide-react';
 
 interface Props {
@@ -72,7 +78,7 @@ export default function VehiculosTableClient({ vehiculos, marcas, sucursales, us
   };
 
   const validatePatente = (value: string): string => {
-    if (!value) return 'La patente es obligatoria.';
+    if (!value) return '';
     if (value.length < 6) return 'Formato: 4 letras, guión, 2-4 números.';
     if (!/^[A-Z]{4}-[0-9]{2,4}$/i.test(value)) return 'Formato requerido: XXXX-XX o XXXX-XXXX.';
     return '';
@@ -110,20 +116,6 @@ export default function VehiculosTableClient({ vehiculos, marcas, sucursales, us
     return '';
   };
 
-  const validateAll = (): boolean => {
-    const newErrors = {
-      chasis: validateChasis(chasis),
-      patente: validatePatente(patente),
-      marca: validateMarca(marca),
-      modelo: validateModelo(modelo),
-      anio: validateAnio(anio),
-      precio: validatePrecio(precio),
-      ubicacion: validateUbicacion(ubicacion),
-    };
-    setErrors(newErrors);
-    return !Object.values(newErrors).some((e) => e !== '');
-  };
-
   const hasErrors = Object.values(errors).some((e) => e !== '');
 
   const [attemptedSubmit, setAttemptedSubmit] = useState(false);
@@ -148,7 +140,13 @@ export default function VehiculosTableClient({ vehiculos, marcas, sucursales, us
   const [resultModal, setResultModal] = useState<{
     type: 'success' | 'error';
     message: string;
+    extra?: { importados?: number; duplicados?: number; errores?: number; marcasProcesadas?: number };
   } | null>(null);
+
+  const [isImportModalOpen, setIsImportModalOpen] = useState(false);
+  const [importCsv, setImportCsv] = useState('');
+  const [importAnioDefecto, setImportAnioDefecto] = useState<number>(new Date().getFullYear());
+  const [isImporting, startImportTransition] = useTransition();
 
   const closeResultModal = () => {
     setShowResultModal(false);
@@ -167,7 +165,7 @@ export default function VehiculosTableClient({ vehiculos, marcas, sucursales, us
 
     const matchesSearch =
       v.chasis.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      v.patente.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (v.patente ?? '').toLowerCase().includes(searchTerm.toLowerCase()) ||
       v.marca.toLowerCase().includes(searchTerm.toLowerCase()) ||
       v.modelo.toLowerCase().includes(searchTerm.toLowerCase());
 
@@ -309,7 +307,7 @@ export default function VehiculosTableClient({ vehiculos, marcas, sucursales, us
   const openEditModal = (vehiculo: VehiculoConDisponibilidad) => {
     setVehiculoToEdit(vehiculo);
     setChasis(vehiculo.chasis);
-    setPatente(vehiculo.patente);
+    setPatente(vehiculo.patente ?? '');
     setMarca(vehiculo.marca);
     setModelo(vehiculo.modelo);
     setAnio(vehiculo.anio);
@@ -322,6 +320,46 @@ export default function VehiculosTableClient({ vehiculos, marcas, sucursales, us
   const openDeleteModal = (vehiculo: VehiculoConDisponibilidad) => {
     setVehiculoToDelete(vehiculo);
     setIsDeleteModalOpen(true);
+  };
+
+  const resetImportModal = () => {
+    setImportCsv('');
+    setImportAnioDefecto(new Date().getFullYear());
+  };
+
+  const handleImportCsv = async () => {
+    const trimmed = importCsv.trim();
+    if (!trimmed) return;
+    startImportTransition(async () => {
+      const res = await importVehiculosAction({
+        csv: trimmed,
+        anioPorDefecto: importAnioDefecto || undefined,
+      });
+      if (res.success) {
+        setResultModal({
+          type: 'success',
+          message: res.mensaje || 'Importación completada.',
+          extra: { importados: res.importados, duplicados: res.duplicados, errores: res.errores, marcasProcesadas: res.marcasProcesadas },
+        });
+        setShowResultModal(true);
+        setIsImportModalOpen(false);
+        resetImportModal();
+      } else {
+        setResultModal({ type: 'error', message: res.error || 'Error al importar.' });
+        setShowResultModal(true);
+      }
+    });
+  };
+
+  const handleFileRead = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      setImportCsv(ev.target?.result as string);
+    };
+    reader.readAsText(file);
+    e.target.value = '';
   };
 
   return (
@@ -338,16 +376,28 @@ export default function VehiculosTableClient({ vehiculos, marcas, sucursales, us
           </p>
         </div>
 
-        <button
-          onClick={() => {
-            resetForm();
-            setIsCreateModalOpen(true);
-          }}
-          className="inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-neutral-900 hover:bg-neutral-700 text-white text-sm font-semibold rounded-xl transition-all cursor-pointer"
-        >
-          <Plus className="w-4 h-4" />
-          <span>Registrar Vehículo</span>
-        </button>
+        <div className="flex items-center gap-3">
+          <button
+            onClick={() => {
+              resetImportModal();
+              setIsImportModalOpen(true);
+            }}
+            className="inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-white border border-neutral-300 text-neutral-900 text-sm font-semibold rounded-xl transition-all hover:bg-neutral-50 cursor-pointer"
+          >
+            <Upload className="w-4 h-4" />
+            <span>Importar CSV</span>
+          </button>
+          <button
+            onClick={() => {
+              resetForm();
+              setIsCreateModalOpen(true);
+            }}
+            className="inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-neutral-900 hover:bg-neutral-700 text-white text-sm font-semibold rounded-xl transition-all cursor-pointer"
+          >
+            <Plus className="w-4 h-4" />
+            <span>Registrar Vehículo</span>
+          </button>
+        </div>
       </div>
 
       {/* Metric Cards */}
@@ -515,9 +565,13 @@ export default function VehiculosTableClient({ vehiculos, marcas, sucursales, us
 
                       {/* Patente */}
                       <td className="py-3.5 px-4">
-                        <span className="inline-flex items-center px-2.5 py-1 rounded-lg text-xs font-semibold bg-neutral-100 text-neutral-900 border border-neutral-200">
-                          {vehiculo.patente}
-                        </span>
+                        {vehiculo.patente ? (
+                          <span className="inline-flex items-center px-2.5 py-1 rounded-lg text-xs font-semibold bg-neutral-100 text-neutral-900 border border-neutral-200">
+                            {vehiculo.patente}
+                          </span>
+                        ) : (
+                          <span className="text-xs text-neutral-400 italic">Sin patente</span>
+                        )}
                       </td>
 
                       {/* Precio */}
@@ -681,7 +735,7 @@ export default function VehiculosTableClient({ vehiculos, marcas, sucursales, us
               <div className="space-y-1.5">
                 <div className="flex items-center justify-between">
                   <label className="text-xs font-semibold text-neutral-600 uppercase tracking-wider">
-                    Patente *
+                    Patente <span className="text-neutral-400 font-medium normal-case">— opcional</span>
                   </label>
                   <span className={`text-[10px] font-mono font-semibold ${/^[A-Z]{4}-[0-9]{2,4}$/i.test(patente) ? 'text-green-600' : patente.length > 0 ? 'text-red-500' : 'text-neutral-400'}`}>
                     {patente || 'XXXX-00'}
@@ -910,7 +964,7 @@ export default function VehiculosTableClient({ vehiculos, marcas, sucursales, us
                 </div>
                 <div>
                   <h2 className="text-lg font-bold text-neutral-900">Editar Vehículo</h2>
-                  <p className="text-xs text-neutral-500">{vehiculoToEdit.patente}</p>
+                  <p className="text-xs text-neutral-500">{vehiculoToEdit.patente || 'Sin patente registrada'}</p>
                 </div>
               </div>
               <button
@@ -972,7 +1026,7 @@ export default function VehiculosTableClient({ vehiculos, marcas, sucursales, us
               <div className="space-y-1.5">
                 <div className="flex items-center justify-between">
                   <label className="text-xs font-semibold text-neutral-600 uppercase tracking-wider">
-                    Patente *
+                    Patente <span className="text-neutral-400 font-medium normal-case">— opcional</span>
                   </label>
                   <span className={`text-[10px] font-mono font-semibold ${/^[A-Z]{4}-[0-9]{2,4}$/i.test(patente) ? 'text-green-600' : patente.length > 0 ? 'text-red-500' : 'text-neutral-400'}`}>
                     {patente || 'XXXX-00'}
@@ -1272,6 +1326,22 @@ export default function VehiculosTableClient({ vehiculos, marcas, sucursales, us
                   {resultModal.type === 'success' ? 'Operación Exitosa' : 'Error'}
                 </h3>
                 <p className="text-sm text-neutral-500 mt-1">{resultModal.message}</p>
+                {resultModal.extra && (
+                  <div className="mt-3 grid grid-cols-2 gap-2 text-xs text-neutral-600">
+                    {resultModal.extra.importados !== undefined && (
+                      <span className="bg-neutral-100 rounded-lg px-2 py-1 font-medium">Importados: <strong>{resultModal.extra.importados}</strong></span>
+                    )}
+                    {resultModal.extra.duplicados !== undefined && (
+                      <span className="bg-neutral-100 rounded-lg px-2 py-1 font-medium">Duplicados: <strong>{resultModal.extra.duplicados}</strong></span>
+                    )}
+                    {resultModal.extra.errores !== undefined && (
+                      <span className="bg-neutral-100 rounded-lg px-2 py-1 font-medium">Errores: <strong>{resultModal.extra.errores}</strong></span>
+                    )}
+                    {resultModal.extra.marcasProcesadas !== undefined && (
+                      <span className="bg-neutral-100 rounded-lg px-2 py-1 font-medium">Marcas: <strong>{resultModal.extra.marcasProcesadas}</strong></span>
+                    )}
+                  </div>
+                )}
               </div>
             </div>
             <div className="px-6 pb-6">
@@ -1285,6 +1355,103 @@ export default function VehiculosTableClient({ vehiculos, marcas, sucursales, us
               >
                 Aceptar
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal: Importar CSV */}
+      {isImportModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm animate-in fade-in">
+          <div className="bg-white border border-neutral-200 rounded-2xl w-full max-w-2xl shadow-2xl overflow-hidden">
+            <div className="flex items-center justify-between p-6 border-b border-neutral-200">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-neutral-900 border border-neutral-900 flex items-center justify-center text-white">
+                  <Upload className="w-5 h-5" />
+                </div>
+                <div>
+                  <h2 className="text-lg font-bold text-neutral-900">Importar Stock CSV</h2>
+                  <p className="text-xs text-neutral-500">
+                    Formato del Excel modelo: Columna C.comp = sucursal, Marca, Modelo, Estad, IDV, Chasis, Color, Fec.adj., P.V.D.
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setIsImportModalOpen(false)}
+                className="text-neutral-400 hover:text-neutral-900 p-1 rounded-lg hover:bg-neutral-100"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-6 space-y-4">
+              <div className="space-y-1.5">
+                <label className="text-xs font-semibold text-neutral-600 uppercase tracking-wider">
+                  Año por defecto (cuando F.adj. está vacío)
+                </label>
+                <input
+                  type="number"
+                  min={2000}
+                  max={new Date().getFullYear() + 2}
+                  value={importAnioDefecto}
+                  onChange={(e) => setImportAnioDefecto(parseInt(e.target.value) || new Date().getFullYear())}
+                  className="w-40 px-3 py-2 bg-white border border-neutral-300 rounded-xl text-sm text-neutral-900 focus:outline-none focus:ring-2 focus:ring-neutral-900"
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-xs font-semibold text-neutral-600 uppercase tracking-wider">
+                  Seleccionar archivo CSV / Excel
+                </label>
+                <input
+                  type="file"
+                  accept=".csv,.tsv,.txt,.xls,.xlsx"
+                  onChange={handleFileRead}
+                  className="block w-full text-sm text-neutral-500 file:mr-3 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-sm file:font-semibold file:bg-neutral-100 file:text-neutral-900 hover:file:bg-neutral-200 cursor-pointer"
+                />
+                <p className="text-[11px] text-neutral-400">
+                  Si seleccionas un archivo Excel (.xls/.xlsx) se leerá la primera hoja como texto separado por tabulaciones.
+                </p>
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="text-xs font-semibold text-neutral-600 uppercase tracking-wider">
+                  O pegar contenido CSV directamente
+                </label>
+                <textarea
+                  rows={6}
+                  placeholder={"C.comp\tMarca\tModelo\tEstad\tIDV\tChasis\tColor\tFec.adj.\tP.V.D.\n101,15 NORTE-VIÑA DEL MAR\tBAI,BAIC\tBAI,BAIC AX7\t...\t...\tLSVA241Z3...\tBLANCO\t15/01/2026\t13,859,244.00"}
+                  value={importCsv}
+                  onChange={(e) => setImportCsv(e.target.value)}
+                  className="w-full px-3 py-2 bg-white border border-neutral-300 rounded-xl text-xs text-neutral-900 placeholder-neutral-300 focus:outline-none focus:ring-2 focus:ring-neutral-900 font-mono whitespace-pre resize-y"
+                />
+              </div>
+
+              <div className="p-3 bg-neutral-50 border border-neutral-200 rounded-xl flex items-start gap-2.5 text-xs text-neutral-600">
+                <AlertCircle className="w-4 h-4 shrink-0 mt-0.5 text-neutral-900" />
+                <span>
+                  Se procesan <strong>todas las filas</strong> del STOCK (incluye IVN, DEM, AVN).
+                  Las columnas Estad e IDV <strong>no se persisten</strong>. Patente y año se completan si están vacíos.
+                </span>
+              </div>
+
+              <div className="flex items-center justify-end gap-3 pt-3 border-t border-neutral-200">
+                <button
+                  type="button"
+                  onClick={() => setIsImportModalOpen(false)}
+                  className="px-4 py-2 text-sm font-semibold text-neutral-600 hover:text-neutral-900 rounded-xl hover:bg-neutral-100 cursor-pointer"
+                >
+                  Cancelar
+                </button>
+                <button
+                  onClick={handleImportCsv}
+                  disabled={!importCsv.trim() || isImporting}
+                  className="px-5 py-2 text-sm font-semibold text-white bg-neutral-900 hover:bg-neutral-700 active:bg-black rounded-xl disabled:opacity-50 cursor-pointer inline-flex items-center gap-2"
+                >
+                  <Upload className="w-4 h-4" />
+                  {isImporting ? 'Importando...' : 'Importar'}
+                </button>
+              </div>
             </div>
           </div>
         </div>

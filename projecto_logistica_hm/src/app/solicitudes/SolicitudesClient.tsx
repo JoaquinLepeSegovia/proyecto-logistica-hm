@@ -63,7 +63,7 @@ interface ViewerInfo {
   id: string;
   nombre: string;
   apellido: string;
-  rol: 'administrador' | 'ejecutivo' | 'jefe_local' | 'logistica';
+  rol: 'administrador' | 'ejecutivo' | 'jefe_local' | 'logistica' | 'operaciones';
   sucursal_id: number | null;
 }
 
@@ -214,7 +214,7 @@ export default function SolicitudesClient({
           (s.ejecutivo_nombre || '').toLowerCase().includes(term) ||
           (getEncargadoNombre(s) || '').toLowerCase().includes(term) ||
           (s.sucursal_destino_nombre || '').toLowerCase().includes(term) ||
-          s.vehiculos.some((v) => v.patente.toLowerCase().includes(term))
+          s.vehiculos.some((v) => (v.patente ?? '').toLowerCase().includes(term))
       );
     }
     return lista;

@@ -108,13 +108,128 @@ export class AuthService {
         | Array<{ nombre: string | null }>
         | null;
 
+      const [sucursalesRes, zonasRes] = await Promise.all([
+        supabase
+          .from('usuario_sucursal')
+          .select('sucursal_id, sucursal:sucursal_id(id, nombre)')
+          .eq('usuario_id', user.id),
+        supabase
+          .from('usuario_zona')
+          .select('zona_id, zona:zona_id(id, nombre)')
+          .eq('usuario_id', user.id),
+      ]);
+
+      const sucursales = (sucursalesRes.data || []).map(
+        (row: {
+          sucursal_id: number;
+          sucursal: Array<{ id: number; nombre: string | null }> | { id: number; nombre: string | null } | null;
+        }) => {
+          const s = Array.isArray(row.sucursal) ? row.sucursal[0] : row.sucursal;
+          return {
+            id: row.sucursal_id,
+            nombre: s?.nombre ?? null,
+          };
+        }
+      );
+      const zonas = (zonasRes.data || []).map(
+        (row: {
+          zona_id: number;
+          zona: Array<{ id: number; nombre: string }> | { id: number; nombre: string } | null;
+        }) => {
+          const z = Array.isArray(row.zona) ? row.zona[0] : row.zona;
+          return {
+            id: row.zona_id,
+            nombre: z?.nombre ?? '',
+          };
+        }
+      );
+
       return {
         ...profile,
         sucursal_nombre: Array.isArray(sucursal) ? sucursal[0]?.nombre ?? null : sucursal?.nombre ?? null,
+        sucursales,
+        zonas,
       } as UserProfile;
     } catch (error) {
       console.error('Error en getCurrentUserProfile:', error);
       return null;
+    }
+  }
+
+  /**
+   * Registro autogestionado (ruta /registro). Siempre crea el usuario con rol
+   * 'ejecutivo'. El perfil public.usuario lo crea el trigger on_auth_user_created;
+   * se fuerza confirmacion de email para que el usuario pueda iniciar sesion de
+   * inmediato (intranet interna).
+   */
+  static async register(data: {
+    nombre: string;
+    apellido: string;
+    email: string;
+    password: string;
+  }): Promise<{ success: boolean; error?: string }> {
+    try {
+      const admin = createAdminClient();
+      const cleanEmail = data.email.trim().toLowerCase();
+
+      const { data: existing } = await admin
+        .from('usuario')
+        .select('id')
+        .eq('email', cleanEmail)
+        .maybeSingle();
+
+      if (existing) {
+        return { success: false, error: 'Ya existe un usuario registrado con ese correo.' };
+      }
+
+      const supabase = await createClient();
+      const { data: authData, error: signUpError } = await supabase.auth.signUp({
+        email: cleanEmail,
+        password: data.password,
+        options: {
+          data: {
+            nombre: data.nombre.trim(),
+            apellido: data.apellido.trim(),
+            rol: 'ejecutivo',
+            requiere_cambio_clave: false,
+          },
+        },
+      });
+
+      if (signUpError) {
+        return { success: false, error: signUpError.message };
+      }
+
+      if (!authData.user) {
+        return { success: false, error: 'No se pudo crear la cuenta. Intenta nuevamente.' };
+      }
+
+      // Confirmar email y asegurar el perfil base en public.usuario
+      await admin.auth.admin.updateUserById(authData.user.id, { email_confirm: true });
+
+      const { data: profileRow } = await admin
+        .from('usuario')
+        .select('id')
+        .eq('id', authData.user.id)
+        .maybeSingle();
+
+      if (!profileRow) {
+        const isAdminEmail = cleanEmail === 'maic.hernandez.dev@gmail.com';
+        await admin.from('usuario').upsert({
+          id: authData.user.id,
+          email: cleanEmail,
+          nombre: data.nombre.trim(),
+          apellido: data.apellido.trim(),
+          rol: isAdminEmail ? 'administrador' : 'ejecutivo',
+          activo: true,
+          requiere_cambio_clave: false,
+        });
+      }
+
+      return { success: true };
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Error inesperado al registrar usuario';
+      return { success: false, error: msg };
     }
   }
 

@@ -42,6 +42,52 @@ export async function updateProfileAction(
   return { success: true, message: 'Perfil actualizado correctamente.' };
 }
 
+export interface RegisterState {
+  success?: boolean;
+  message?: string;
+  error?: string;
+}
+
+export async function registerAction(
+  prevState: RegisterState | null,
+  formData: FormData
+): Promise<RegisterState> {
+  const nombre = formData.get('nombre') as string;
+  const apellido = formData.get('apellido') as string;
+  const email = formData.get('email') as string;
+  const password = formData.get('password') as string;
+  const confirmPassword = formData.get('confirmPassword') as string;
+
+  if (!nombre?.trim() || !apellido?.trim()) {
+    return { success: false, error: 'El nombre y el apellido son obligatorios.' };
+  }
+  if (!email?.trim()) {
+    return { success: false, error: 'El correo electrónico es obligatorio.' };
+  }
+  if (!password || password.length < 8) {
+    return { success: false, error: 'La contraseña debe tener al menos 8 caracteres.' };
+  }
+  if (password !== confirmPassword) {
+    return { success: false, error: 'Las contraseñas no coinciden.' };
+  }
+
+  const result = await AuthService.register({
+    nombre,
+    apellido,
+    email,
+    password,
+  });
+
+  if (!result.success) {
+    return { success: false, error: result.error || 'No se pudo registrar la cuenta.' };
+  }
+
+  return {
+    success: true,
+    message: 'Cuenta creada exitosamente. Ya puedes iniciar sesión.',
+  };
+}
+
 export async function loginAction(prevState: unknown, formData: FormData) {
   const email = formData.get('email') as string;
   const password = formData.get('password') as string;

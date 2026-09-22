@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useTransition } from 'react';
 import { UserProfile, UserRole } from '@/types/auth.types';
-import { Sucursal } from '@/types/sucursal.types';
+import { Sucursal, Zona } from '@/types/sucursal.types';
 import { UsuarioNombreBoton } from '@/components/usuario-info-modal';
 import { createUserAction, updateUserAction, toggleUserStatusAction, resetUserPasswordAction } from '@/app/actions/users.actions';
 import {
@@ -11,7 +11,6 @@ import {
   Search,
   CheckCircle2,
   XCircle,
-  Mail,
   Key,
   Power,
   X,
@@ -27,7 +26,7 @@ import {
 interface Props {
   users: UserProfile[];
   sucursales: Sucursal[];
-  currentAdminEmail: string;
+  zonas: Zona[];
   currentAdminId: string;
 }
 
@@ -48,9 +47,60 @@ const roleLabels: Record<UserRole, { label: string; color: string }> = {
     label: 'Logística',
     color: 'bg-neutral-100 text-neutral-500 border-neutral-300',
   },
+  operaciones: {
+    label: 'Operaciones',
+    color: 'bg-neutral-600 text-white border-neutral-600',
+  },
 };
 
-export default function UsersTableClient({ users, sucursales, currentAdminEmail, currentAdminId }: Props) {
+function toggleId(list: number[], id: number): number[] {
+  return list.includes(id) ? list.filter((x) => x !== id) : [...list, id];
+}
+
+function MultiCheckSelector({
+  title,
+  options,
+  selected,
+  onToggle,
+}: {
+  title: string;
+  options: { id: number; label: string }[];
+  selected: number[];
+  onToggle: (id: number) => void;
+}) {
+  return (
+    <div className="space-y-1.5">
+      <label className="text-xs font-semibold text-neutral-600 uppercase tracking-wider">
+        {title}
+      </label>
+      {options.length === 0 ? (
+        <p className="text-xs text-neutral-400 italic">Sin opciones disponibles.</p>
+      ) : (
+        <div className="flex flex-wrap gap-2">
+          {options.map((o) => {
+            const active = selected.includes(o.id);
+            return (
+              <button
+                type="button"
+                key={o.id}
+                onClick={() => onToggle(o.id)}
+                className={`px-2.5 py-1 rounded-lg text-xs font-medium border transition-colors cursor-pointer ${
+                  active
+                    ? 'bg-neutral-900 text-white border-neutral-900'
+                    : 'bg-white text-neutral-600 border-neutral-300 hover:border-neutral-900'
+                }`}
+              >
+                {o.label}
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+export default function UsersTableClient({ users, sucursales, zonas, currentAdminId }: Props) {
   const [isHydrated, setIsHydrated] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedRole, setSelectedRole] = useState<string>('todos');
@@ -71,6 +121,8 @@ export default function UsersTableClient({ users, sucursales, currentAdminEmail,
   const [customPassword, setCustomPassword] = useState('');
   const [rol, setRol] = useState<UserRole>('ejecutivo');
   const [sucursalId, setSucursalId] = useState<number | null>(null);
+  const [sucursalesIds, setSucursalesIds] = useState<number[]>([]);
+  const [zonasIds, setZonasIds] = useState<number[]>([]);
   const [isSubmitting, startTransition] = useTransition();
 
   // Edit User modal states
@@ -80,6 +132,8 @@ export default function UsersTableClient({ users, sucursales, currentAdminEmail,
   const [editApellido, setEditApellido] = useState('');
   const [editRol, setEditRol] = useState<UserRole>('ejecutivo');
   const [editSucursalId, setEditSucursalId] = useState<number | null>(null);
+  const [editSucursalesIds, setEditSucursalesIds] = useState<number[]>([]);
+  const [editZonasIds, setEditZonasIds] = useState<number[]>([]);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -109,6 +163,8 @@ export default function UsersTableClient({ users, sucursales, currentAdminEmail,
     setEmailPrefix('');
     setCustomPassword('');
     setSucursalId(null);
+    setSucursalesIds([]);
+    setZonasIds([]);
   };
 
   const handleCreateUser = async (e: React.FormEvent<HTMLFormElement>) => {
@@ -129,6 +185,8 @@ export default function UsersTableClient({ users, sucursales, currentAdminEmail,
         rol,
         password: customPassword.trim() || undefined,
         sucursal_id: sucursalId,
+        sucursales_ids: sucursalesIds.length > 0 ? sucursalesIds : undefined,
+        zonas_ids: zonasIds.length > 0 ? zonasIds : undefined,
       });
 
       if (res.success) {
@@ -217,6 +275,8 @@ export default function UsersTableClient({ users, sucursales, currentAdminEmail,
     setEditApellido(user.apellido);
     setEditRol(user.rol);
     setEditSucursalId(user.sucursal_id ?? null);
+    setEditSucursalesIds((user.sucursales ?? []).map((s) => s.id).filter((id) => id !== user.sucursal_id));
+    setEditZonasIds((user.zonas ?? []).map((z) => z.id));
     setIsEditModalOpen(true);
   };
 
@@ -226,6 +286,8 @@ export default function UsersTableClient({ users, sucursales, currentAdminEmail,
     setEditApellido('');
     setEditRol('ejecutivo');
     setEditSucursalId(null);
+    setEditSucursalesIds([]);
+    setEditZonasIds([]);
   };
 
   const handleEditUser = async (e: React.FormEvent<HTMLFormElement>) => {
@@ -239,6 +301,8 @@ export default function UsersTableClient({ users, sucursales, currentAdminEmail,
         apellido: editApellido.trim(),
         rol: editRol,
         sucursal_id: editSucursalId,
+        sucursales_ids: editSucursalesIds.length > 0 ? editSucursalesIds : undefined,
+        zonas_ids: editZonasIds.length > 0 ? editZonasIds : undefined,
       });
 
       if (res.success) {
@@ -410,6 +474,7 @@ export default function UsersTableClient({ users, sucursales, currentAdminEmail,
             <option value="jefe_local">Jefe de Local</option>
             <option value="ejecutivo">Ejecutivo</option>
             <option value="logistica">Logística</option>
+            <option value="operaciones">Operaciones</option>
           </select>
         </div>
       </div>
@@ -486,21 +551,44 @@ export default function UsersTableClient({ users, sucursales, currentAdminEmail,
 
                       {/* Sucursal */}
                       <td className="py-3.5 px-4">
-                        {user.sucursal_id ? (
-                          (() => {
-                            const suc = sucursales.find((s) => s.id === user.sucursal_id);
-                            return suc ? (
-                              <div className="flex items-center gap-1.5">
-                                <Building2 className="w-3.5 h-3.5 text-neutral-400" />
-                                <span className="text-xs font-medium text-neutral-700">{suc.nombre}</span>
-                              </div>
-                            ) : (
-                              <span className="text-xs text-neutral-400">Sin asignar</span>
-                            );
-                          })()
-                        ) : (
-                          <span className="text-xs text-neutral-400">Sin asignar</span>
-                        )}
+                        {(() => {
+                          const mainSuc = user.sucursal_id
+                            ? sucursales.find((s) => s.id === user.sucursal_id)
+                            : undefined;
+                          const extras = (user.sucursales ?? []).filter((s) => s.id !== user.sucursal_id);
+                          const zonaNombres = (user.zonas ?? [])
+                            .map((z) => zonas.find((z2) => z2.id === z.id)?.nombre)
+                            .filter(Boolean) as string[];
+                          return (
+                            <div className="space-y-1.5">
+                              {mainSuc ? (
+                                <div className="flex items-center gap-1.5">
+                                  <Building2 className="w-3.5 h-3.5 text-neutral-400" />
+                                  <span className="text-xs font-medium text-neutral-700">{mainSuc.nombre}</span>
+                                  {extras.length > 0 && (
+                                    <span className="text-[10px] font-semibold text-neutral-400">
+                                      +{extras.length} más
+                                    </span>
+                                  )}
+                                </div>
+                              ) : (
+                                <span className="text-xs text-neutral-400">Sin asignar</span>
+                              )}
+                              {zonaNombres.length > 0 && (
+                                <div className="flex flex-wrap gap-1">
+                                  {zonaNombres.map((name) => (
+                                    <span
+                                      key={name}
+                                      className="px-1.5 py-0.5 rounded-full bg-neutral-100 text-neutral-500 border border-neutral-200 text-[10px] font-medium"
+                                    >
+                                      {name}
+                                    </span>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })()}
                       </td>
 
                       {/* Status */}
@@ -675,6 +763,7 @@ export default function UsersTableClient({ users, sucursales, currentAdminEmail,
                   <option value="ejecutivo">Ejecutivo (Gestión de solicitudes/vehículos)</option>
                   <option value="jefe_local">Jefe de Local (Aprobación, priorización, entrega)</option>
                   <option value="logistica">Logística (Coordinación de traslados)</option>
+                  <option value="operaciones">Operaciones (Ingreso/mantenimiento de vehículos)</option>
                   <option value="administrador">Administrador (Control total del sistema)</option>
                 </select>
               </div>
@@ -697,6 +786,20 @@ export default function UsersTableClient({ users, sucursales, currentAdminEmail,
                   ))}
                 </select>
               </div>
+
+              <MultiCheckSelector
+                title="Otras sucursales asignadas (multisede)"
+                options={sucursales.filter((s) => s.id !== sucursalId).map((s) => ({ id: s.id, label: s.nombre ?? '' }))}
+                selected={sucursalesIds}
+                onToggle={(id) => setSucursalesIds((prev) => toggleId(prev, id))}
+              />
+
+              <MultiCheckSelector
+                title="Zonas de logística territorial"
+                options={zonas.map((z) => ({ id: z.id, label: z.nombre }))}
+                selected={zonasIds}
+                onToggle={(id) => setZonasIds((prev) => toggleId(prev, id))}
+              />
 
               {/* Optional Custom Password */}
               <div className="space-y-1.5">
@@ -807,6 +910,7 @@ export default function UsersTableClient({ users, sucursales, currentAdminEmail,
                   <option value="ejecutivo">Ejecutivo (Gestión de solicitudes/vehículos)</option>
                   <option value="jefe_local">Jefe de Local (Aprobación, priorización, entrega)</option>
                   <option value="logistica">Logística (Coordinación de traslados)</option>
+                  <option value="operaciones">Operaciones (Ingreso/mantenimiento de vehículos)</option>
                   <option value="administrador">Administrador (Control total del sistema)</option>
                 </select>
               </div>
@@ -829,6 +933,20 @@ export default function UsersTableClient({ users, sucursales, currentAdminEmail,
                   ))}
                 </select>
               </div>
+
+              <MultiCheckSelector
+                title="Otras sucursales asignadas (multisede)"
+                options={sucursales.filter((s) => s.id !== editSucursalId).map((s) => ({ id: s.id, label: s.nombre ?? '' }))}
+                selected={editSucursalesIds}
+                onToggle={(id) => setEditSucursalesIds((prev) => toggleId(prev, id))}
+              />
+
+              <MultiCheckSelector
+                title="Zonas de logística territorial"
+                options={zonas.map((z) => ({ id: z.id, label: z.nombre }))}
+                selected={editZonasIds}
+                onToggle={(id) => setEditZonasIds((prev) => toggleId(prev, id))}
+              />
 
               {/* Modal Actions */}
               <div className="flex items-center justify-end gap-3 pt-3 border-t border-neutral-200">

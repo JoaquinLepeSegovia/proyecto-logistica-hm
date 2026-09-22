@@ -1,5 +1,6 @@
 import { AuthService } from '@/services/auth.service';
 import { SucursalesService } from '@/services/sucursales.service';
+import { OrganizacionService } from '@/services/organizacion.service';
 import { redirect } from 'next/navigation';
 import SucursalesTableClient from './SucursalesTableClient';
 import TopNavbar from '@/components/TopNavbar';
@@ -17,9 +18,10 @@ export default async function AdminSucursalesPage() {
     redirect('/dashboard?error=unauthorized');
   }
 
-  const [sucursales, solicitudes] = await Promise.all([
+  const [sucursales, solicitudes, zonas] = await Promise.all([
     SucursalesService.getSucursales(),
     SucursalesService.getSolicitudesPorSucursal(),
+    OrganizacionService.getZonas(),
   ]);
 
   return (
@@ -35,7 +37,7 @@ export default async function AdminSucursalesPage() {
 
       {/* Main Content */}
       <main className="flex-1 w-full px-4 sm:px-8 lg:px-12 py-8">
-        <SucursalesTableClient sucursales={sucursales} solicitudes={solicitudes} />
+        <SucursalesTableClient sucursales={sucursales} solicitudes={solicitudes} zonas={zonas} />
       </main>
     </div>
   );

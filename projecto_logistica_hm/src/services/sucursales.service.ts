@@ -45,7 +45,7 @@ export class SucursalesService {
       const admin = createAdminClient();
       const { data, error } = await admin
         .from('sucursal')
-        .select('*, encargado:usuario_id(id, nombre, apellido)')
+        .select('*, encargado:usuario_id(id, nombre, apellido), zona:zona_id(id, nombre)')
         .order('nombre', { ascending: true });
 
       if (error) {
@@ -143,6 +143,7 @@ export class SucursalesService {
           nombre: input.nombre.trim(),
           direccion: input.direccion?.trim() || null,
           slots: input.slots,
+          zona_id: input.zona_id ?? null,
         })
         .select()
         .single();
@@ -185,6 +186,7 @@ export class SucursalesService {
       if (input.nombre !== undefined) updateData.nombre = input.nombre.trim();
       if (input.direccion !== undefined) updateData.direccion = input.direccion?.trim() || null;
       if (input.slots !== undefined) updateData.slots = input.slots;
+      if (input.zona_id !== undefined) updateData.zona_id = input.zona_id ?? null;
 
       const { data, error } = await admin
         .from('sucursal')

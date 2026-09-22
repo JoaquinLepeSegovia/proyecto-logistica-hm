@@ -21,6 +21,12 @@ export interface SucursalEncargado {
   apellido: string;
 }
 
+export interface Zona {
+  id: number;
+  nombre: string;
+  created_at?: string;
+}
+
 export interface Sucursal {
   id: number;
   created_at: string;
@@ -30,6 +36,8 @@ export interface Sucursal {
   slots: number | null;
   slots_ocupados: number | null;
   slots_reservados: number | null;
+  zona_id?: number | null;
+  zona?: Zona | null;
   encargado?: SucursalEncargado | null;
 }
 
@@ -37,18 +45,20 @@ export interface CreateSucursalInput {
   nombre: string;
   direccion?: string | null;
   slots: number;
+  zona_id?: number | null;
 }
 
 export interface UpdateSucursalInput {
   nombre?: string;
   direccion?: string | null;
   slots?: number;
+  zona_id?: number | null;
 }
 
 export interface VehiculoAsociado {
   solicitud_vehiculo_id: string;
   disponibilidad: DisponibilidadVehiculo;
-  patente: string;
+  patente: string | null;
   chasis: string;
   marca: string;
   modelo: string;

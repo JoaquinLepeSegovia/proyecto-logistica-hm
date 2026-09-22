@@ -20,13 +20,15 @@ export interface CreateUserData {
   rol: UserRole;
   password?: string;
   sucursal_id?: number | null;
+  sucursales_ids?: number[];
+  zonas_ids?: number[];
 }
 
 export async function createUserAction(data: CreateUserData) {
   try {
     await verifyAdminPermission();
 
-    const { nombre, apellido, email, rol, password, sucursal_id } = data;
+    const { nombre, apellido, email, rol, password, sucursal_id, sucursales_ids, zonas_ids } = data;
 
     if (!nombre?.trim() || !apellido?.trim() || !email?.trim() || !rol) {
       return {
@@ -41,6 +43,8 @@ export async function createUserAction(data: CreateUserData) {
       email: email.trim().toLowerCase(),
       rol,
       sucursal_id: sucursal_id ?? null,
+      sucursales_ids: sucursales_ids || [],
+      zonas_ids: zonas_ids || [],
     };
 
     const result = await UsersService.createUser(input, password);
@@ -53,6 +57,7 @@ export async function createUserAction(data: CreateUserData) {
     }
 
     revalidatePath('/admin/usuarios');
+    revalidatePath('/admin/zonas');
     return {
       success: true,
       message: result.emailSent
@@ -116,13 +121,15 @@ export interface UpdateUserData {
   apellido: string;
   rol: UserRole;
   sucursal_id?: number | null;
+  sucursales_ids?: number[];
+  zonas_ids?: number[];
 }
 
 export async function updateUserAction(data: UpdateUserData) {
   try {
     await verifyAdminPermission();
 
-    const { userId, nombre, apellido, rol, sucursal_id } = data;
+    const { userId, nombre, apellido, rol, sucursal_id, sucursales_ids, zonas_ids } = data;
 
     if (!userId || !nombre?.trim() || !apellido?.trim() || !rol) {
       return {
@@ -136,6 +143,8 @@ export async function updateUserAction(data: UpdateUserData) {
       apellido: apellido.trim(),
       rol,
       sucursal_id: sucursal_id ?? null,
+      sucursales_ids: sucursales_ids || [],
+      zonas_ids: zonas_ids || [],
     });
 
     if (!result.success) {
@@ -143,6 +152,7 @@ export async function updateUserAction(data: UpdateUserData) {
     }
 
     revalidatePath('/admin/usuarios');
+    revalidatePath('/admin/zonas');
     return { success: true, message: 'Usuario actualizado exitosamente.' };
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : 'Error inesperado';

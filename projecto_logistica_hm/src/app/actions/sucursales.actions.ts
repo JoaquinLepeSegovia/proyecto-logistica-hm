@@ -22,6 +22,7 @@ export interface SucursalFormData {
   nombre: string;
   direccion?: string;
   slots: string;
+  zona_id?: number | null;
 }
 
 export async function createSucursalAction(data: SucursalFormData) {
@@ -43,6 +44,7 @@ export async function createSucursalAction(data: SucursalFormData) {
       nombre,
       direccion: data.direccion?.trim() || null,
       slots,
+      zona_id: data.zona_id ?? null,
     });
 
     if (!result.success) {
@@ -50,6 +52,7 @@ export async function createSucursalAction(data: SucursalFormData) {
     }
 
     revalidatePath('/admin/sucursales');
+    revalidatePath('/admin/zonas');
     return { success: true, message: `Sucursal "${nombre}" creada exitosamente.` };
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : 'Error inesperado';
@@ -76,6 +79,7 @@ export async function updateSucursalAction(id: number, data: SucursalFormData) {
       nombre,
       direccion: data.direccion?.trim() || null,
       slots,
+      zona_id: data.zona_id ?? null,
     });
 
     if (!result.success) {
@@ -83,6 +87,7 @@ export async function updateSucursalAction(id: number, data: SucursalFormData) {
     }
 
     revalidatePath('/admin/sucursales');
+    revalidatePath('/admin/zonas');
     return { success: true, message: `Sucursal "${nombre}" actualizada exitosamente.` };
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : 'Error inesperado';

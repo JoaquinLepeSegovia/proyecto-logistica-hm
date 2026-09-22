@@ -181,8 +181,11 @@ function LoginForm() {
         </div>
 
         {/* Footer info */}
-        <p className="text-center text-xs text-neutral-400">
-          ¿No tienes cuenta? Solicita el alta a un Administrador de H.Motores.
+        <p className="text-center text-xs text-neutral-400 space-x-2">
+          <span>¿No tienes cuenta?</span>
+          <Link href="/registro" className="underline underline-offset-2 font-medium text-neutral-900 hover:text-neutral-600 transition-colors">
+            Crear cuenta
+          </Link>
         </p>
       </div>
     </div>

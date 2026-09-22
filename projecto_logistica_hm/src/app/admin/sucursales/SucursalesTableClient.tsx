@@ -23,6 +23,7 @@ import {
   EstadoSolicitud,
   Sucursal,
   SucursalSolicitudItem,
+  Zona,
 } from '@/types/sucursal.types';
 import { formatFecha } from '@/lib/fechas';
 import { UsuarioNombreBoton } from '@/components/usuario-info-modal';
@@ -54,9 +55,10 @@ interface FeedbackState {
 interface SucursalesTableClientProps {
   sucursales: Sucursal[];
   solicitudes: SucursalSolicitudItem[];
+  zonas: Zona[];
 }
 
-export default function SucursalesTableClient({ sucursales, solicitudes }: SucursalesTableClientProps) {
+export default function SucursalesTableClient({ sucursales, solicitudes, zonas }: SucursalesTableClientProps) {
   const [searchTerm, setSearchTerm] = useState('');
   const [feedback, setFeedback] = useState<FeedbackState | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -70,6 +72,7 @@ export default function SucursalesTableClient({ sucursales, solicitudes }: Sucur
   const [nombre, setNombre] = useState('');
   const [direccion, setDireccion] = useState('');
   const [slots, setSlots] = useState('');
+  const [zonaId, setZonaId] = useState<number | null>(null);
 
   const totalSucursales = sucursales.length;
   const capacidadTotal = useMemo(
@@ -110,6 +113,7 @@ export default function SucursalesTableClient({ sucursales, solicitudes }: Sucur
     setNombre('');
     setDireccion('');
     setSlots('');
+    setZonaId(null);
     setIsModalOpen(true);
   }
 
@@ -118,6 +122,7 @@ export default function SucursalesTableClient({ sucursales, solicitudes }: Sucur
     setNombre(sucursal.nombre || '');
     setDireccion(sucursal.direccion || '');
     setSlots(sucursal.slots !== null && sucursal.slots !== undefined ? String(sucursal.slots) : '');
+    setZonaId(sucursal.zona_id ?? null);
     setIsModalOpen(true);
   }
 
@@ -125,7 +130,7 @@ export default function SucursalesTableClient({ sucursales, solicitudes }: Sucur
     e.preventDefault();
     setIsSubmitting(true);
     try {
-      const data = { nombre, direccion, slots };
+      const data = { nombre, direccion, slots, zona_id: zonaId };
       const result = editingSucursal
         ? await updateSucursalAction(editingSucursal.id, data)
         : await createSucursalAction(data);
@@ -277,6 +282,7 @@ export default function SucursalesTableClient({ sucursales, solicitudes }: Sucur
             <thead>
               <tr className="border-b border-neutral-200 bg-neutral-50 text-xs uppercase font-semibold text-neutral-500 tracking-wider">
                 <th className="py-3.5 px-4">Sucursal</th>
+                <th className="py-3.5 px-4">Zona</th>
                 <th className="py-3.5 px-4">Encargado</th>
                 <th className="py-3.5 px-4">Capacidad</th>
                 <th className="py-3.5 px-4">Solicitudes</th>
@@ -287,7 +293,7 @@ export default function SucursalesTableClient({ sucursales, solicitudes }: Sucur
             <tbody className="divide-y divide-neutral-200 text-sm">
               {filteredSucursales.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="py-8 text-center text-neutral-400">
+                  <td colSpan={7} className="py-8 text-center text-neutral-400">
                     No se encontraron sucursales que coincidan con la búsqueda.
                   </td>
                 </tr>
@@ -312,6 +318,18 @@ export default function SucursalesTableClient({ sucursales, solicitudes }: Sucur
                             <MapPin className="w-3 h-3 shrink-0" />
                             {sucursal.direccion}
                           </p>
+                        )}
+                      </td>
+
+                      {/* Zona */}
+                      <td className="py-3.5 px-4">
+                        {sucursal.zona_id ? (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-neutral-100 text-neutral-700 border border-neutral-200">
+                            {zonas.find((z) => z.id === sucursal.zona_id)?.nombre ||
+                              `Zona #${sucursal.zona_id}`}
+                          </span>
+                        ) : (
+                          <span className="text-xs text-neutral-400 italic">Sin zona</span>
                         )}
                       </td>
 
@@ -490,6 +508,24 @@ export default function SucursalesTableClient({ sucursales, solicitudes }: Sucur
                     onChange={(e) => setSlots(e.target.value)}
                     className="w-full px-3 py-2 bg-white border border-neutral-300 rounded-xl text-sm text-neutral-900 placeholder-neutral-400 focus:outline-none focus:ring-2 focus:ring-neutral-900"
                   />
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="text-xs font-semibold text-neutral-600 uppercase tracking-wider">
+                    Zona
+                  </label>
+                  <select
+                    value={zonaId ?? ''}
+                    onChange={(e) => setZonaId(e.target.value ? Number(e.target.value) : null)}
+                    className="w-full px-3 py-2 bg-white border border-neutral-300 rounded-xl text-sm text-neutral-900 focus:outline-none focus:ring-2 focus:ring-neutral-900"
+                  >
+                    <option value="">Sin zona</option>
+                    {zonas.map((z) => (
+                      <option key={z.id} value={z.id}>
+                        {z.nombre}
+                      </option>
+                    ))}
+                  </select>
                 </div>
               </div>
 

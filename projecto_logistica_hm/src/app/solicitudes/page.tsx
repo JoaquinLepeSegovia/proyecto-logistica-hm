@@ -21,6 +21,11 @@ export default async function SolicitudesPage() {
   const esGestor = profile.rol === 'jefe_local' || profile.rol === 'administrador';
   const esEjecutivo = profile.rol === 'ejecutivo';
 
+  const rolesSolicitudes = ['administrador', 'jefe_local', 'ejecutivo', 'logistica'];
+  if (!rolesSolicitudes.includes(profile.rol)) {
+    redirect('/dashboard?error=unauthorized');
+  }
+
   const [solicitudes, sucursales, vehiculos] = await Promise.all([
     SolicitudesService.getSolicitudes(),
     SucursalesService.getSucursales(),
