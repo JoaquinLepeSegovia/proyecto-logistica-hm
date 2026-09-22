@@ -146,6 +146,8 @@ export default function VehiculosTableClient({ vehiculos, marcas, sucursales, us
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   const [importCsv, setImportCsv] = useState('');
   const [importAnioDefecto, setImportAnioDefecto] = useState<number>(new Date().getFullYear());
+  const [archivoImport, setArchivoImport] = useState('');
+  const [isReadingFile, setIsReadingFile] = useState(false);
   const [isImporting, startImportTransition] = useTransition();
 
   const closeResultModal = () => {
@@ -325,6 +327,8 @@ export default function VehiculosTableClient({ vehiculos, marcas, sucursales, us
   const resetImportModal = () => {
     setImportCsv('');
     setImportAnioDefecto(new Date().getFullYear());
+    setArchivoImport('');
+    setIsReadingFile(false);
   };
 
   const handleImportCsv = async () => {
@@ -354,12 +358,61 @@ export default function VehiculosTableClient({ vehiculos, marcas, sucursales, us
   const handleFileRead = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    const reader = new FileReader();
-    reader.onload = (ev) => {
-      setImportCsv(ev.target?.result as string);
-    };
-    reader.readAsText(file);
+    const esExcel = /\.(xls|xlsx)$/i.test(file.name);
+    setArchivoImport(file.name);
     e.target.value = '';
+
+    if (esExcel) {
+      setIsReadingFile(true);
+      void (async () => {
+        try {
+          const XLSX = await import('xlsx');
+          const data = await file.arrayBuffer();
+          const wb = XLSX.read(data, { type: 'array' });
+          const hoja = wb.Sheets[wb.SheetNames[0] || ''];
+          if (!hoja) {
+            setResultModal({ type: 'error', message: 'El archivo Excel no contiene hojas válidas.' });
+            setShowResultModal(true);
+            setArchivoImport('');
+            return;
+          }
+          const filas: unknown[][] = XLSX.utils.sheet_to_json(hoja, {
+            header: 1,
+            raw: false,
+            defval: '',
+          });
+          const csv = filas
+            .map((fila) =>
+              Array.isArray(fila)
+                ? fila
+                    .map((cell) => {
+                      const txt = String(cell ?? '').trim();
+                      return /[",\n]/.test(txt) ? `"${txt.replace(/"/g, '""')}"` : txt;
+                    })
+                    .join(',')
+                : ''
+            )
+            .join('\n');
+          setImportCsv(csv);
+        } catch {
+          setResultModal({
+            type: 'error',
+            message: 'No se pudo leer el archivo Excel. Verifica que sea un .xls o .xlsx válido.',
+          });
+          setShowResultModal(true);
+          setImportCsv('');
+          setArchivoImport('');
+        } finally {
+          setIsReadingFile(false);
+        }
+      })();
+    } else {
+      const reader = new FileReader();
+      reader.onload = (ev) => {
+        setImportCsv((ev.target?.result as string) ?? '');
+      };
+      reader.readAsText(file);
+    }
   };
 
   return (
@@ -385,7 +438,7 @@ export default function VehiculosTableClient({ vehiculos, marcas, sucursales, us
             className="inline-flex items-center justify-center gap-2 px-4 py-2.5 bg-white border border-neutral-300 text-neutral-900 text-sm font-semibold rounded-xl transition-all hover:bg-neutral-50 cursor-pointer"
           >
             <Upload className="w-4 h-4" />
-            <span>Importar CSV</span>
+            <span>Importar Stock</span>
           </button>
           <button
             onClick={() => {
@@ -1370,7 +1423,7 @@ export default function VehiculosTableClient({ vehiculos, marcas, sucursales, us
                   <Upload className="w-5 h-5" />
                 </div>
                 <div>
-                  <h2 className="text-lg font-bold text-neutral-900">Importar Stock CSV</h2>
+                  <h2 className="text-lg font-bold text-neutral-900">Importar Stock CSV o Excel</h2>
                   <p className="text-xs text-neutral-500">
                     Formato del Excel modelo: Columna C.comp = sucursal, Marca, Modelo, Estad, IDV, Chasis, Color, Fec.adj., P.V.D.
                   </p>
@@ -1409,8 +1462,15 @@ export default function VehiculosTableClient({ vehiculos, marcas, sucursales, us
                   onChange={handleFileRead}
                   className="block w-full text-sm text-neutral-500 file:mr-3 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-sm file:font-semibold file:bg-neutral-100 file:text-neutral-900 hover:file:bg-neutral-200 cursor-pointer"
                 />
+                {archivoImport && (
+                  <p className="text-[11px] text-neutral-500 flex items-center gap-1.5">
+                    <span className="inline-block w-1.5 h-1.5 rounded-full bg-neutral-900" />
+                    {archivoImport}
+                    {isReadingFile ? ' — leyendo…' : ' — listo para importar'}
+                  </p>
+                )}
                 <p className="text-[11px] text-neutral-400">
-                  Si seleccionas un archivo Excel (.xls/.xlsx) se leerá la primera hoja como texto separado por tabulaciones.
+                  Archivos Excel (.xls/.xlsx): se lee la primera hoja tal cual viene. También se aceptan .csv, .tsv y pegar texto.
                 </p>
               </div>
 
@@ -1445,7 +1505,7 @@ export default function VehiculosTableClient({ vehiculos, marcas, sucursales, us
                 </button>
                 <button
                   onClick={handleImportCsv}
-                  disabled={!importCsv.trim() || isImporting}
+                  disabled={!importCsv.trim() || isReadingFile || isImporting}
                   className="px-5 py-2 text-sm font-semibold text-white bg-neutral-900 hover:bg-neutral-700 active:bg-black rounded-xl disabled:opacity-50 cursor-pointer inline-flex items-center gap-2"
                 >
                   <Upload className="w-4 h-4" />

@@ -563,6 +563,7 @@ export class VehiculoService {
     let current = '';
     let inQuotes = false;
     const cells: string[] = [];
+    const delimitador = VehiculoService.detectarDelimitador(texto);
 
     for (let i = 0; i < texto.length; i++) {
       const ch = texto[i];
@@ -579,7 +580,7 @@ export class VehiculoService {
         }
       } else if (ch === '"') {
         inQuotes = true;
-      } else if (ch === ',') {
+      } else if (ch === delimitador) {
         cells.push(current);
         current = '';
       } else if (ch === '\n') {
@@ -595,6 +596,14 @@ export class VehiculoService {
       rows.push(cells);
     }
     return rows.filter((r) => r.some((c) => c.trim() !== ''));
+  }
+
+  /** Detecta si el encabezado usa tabulaciones como separador principal (TSV). */
+  private static detectarDelimitador(texto: string): string {
+    const primeraLinea = texto.split('\n')[0] || '';
+    const tabs = (primeraLinea.match(/\t/g) || []).length;
+    const comas = (primeraLinea.match(/,/g) || []).length;
+    return tabs > comas ? '\t' : ',';
   }
 
   /** Devuelve un mapa codigo -> id de sucursal (por id exacto y por nombre normalizado). */
